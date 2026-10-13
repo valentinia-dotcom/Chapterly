@@ -259,6 +259,19 @@ header[data-testid="stHeader"] button,
     background-color: #303B5C !important;
     border-radius: 8px !important;
 }
+/* Streamlit top-right toolbar icons */
+[data-testid="stToolbar"] button svg,
+[data-testid="stToolbar"] button svg path,
+header[data-testid="stHeader"] button svg,
+header[data-testid="stHeader"] button svg path {
+    color: #FFFFFF !important;
+    stroke: #FFFFFF !important;
+}
+
+/* Keep toolbar buttons dark navy */
+[data-testid="stToolbar"] button {
+    background-color: #303B5C !important;
+}
 </style>
 
 """, unsafe_allow_html=True)
