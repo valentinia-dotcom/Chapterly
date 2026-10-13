@@ -594,24 +594,23 @@ def library():
                     st.write(f"{icon} {item['topic_order']}. {item['topic_name']}")
                 upcoming = next((item for item in path if not item["completed"]), None)
                 if upcoming:
-                  st.info(f"📚 Recommended next: {upcoming['topic_name']}")
+                    st.info(f"📚 Recommended next: {upcoming['topic_name']}")
                 else:
                     st.success("🎉 All topics completed!")
 
-                # Select any topic
+                # Allow selection of any topic
                 topic_names = [item["topic_name"] for item in path]
-
-                default_topic = (
-                    upcoming["topic_name"] if upcoming else topic_names[0])
 
                 selected_topic = st.selectbox(
                     "Choose the topic you want to study",
                     options=topic_names,
-                    index=topic_names.index(default_topic),
-                    key=f"library_selected_topic_{d['id']}",
+                    key=f"library_selected_topic_{d['id']}"
                 )
 
-                if st.button("▶ Study selected topic", key=f"library_study_{d['id']}"):
+                if st.button(
+                    "▶ Study selected topic",
+                    key=f"library_study_{d['id']}"
+                ):
                     start_next_tutor_topic(d["id"], selected_topic)
             else:
                 st.info("This source needs readable lesson text to identify topics.")
