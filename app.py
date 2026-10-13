@@ -14,7 +14,7 @@ from mindmaps import render_mindmap
 from tutoring import (LEVELS, missed_questions, needs_tutor_invite, next_level,
                       quiz_percentage, retry_missed_quiz, review_payload)
 from core import (BASE_DIR, activity, add_diagram_document, add_document, add_url_document, difficulty_for,
-                  get_document_topics, get_documents, init_db, mastery, retrieve,
+                  get_document_topics, get_documents, init_db, mastery, retrieve, ensure_learning_path,
                   save_attempt, topic_stats, web_source_url, get_chunks, get_learning_path, save_learning_path,
                   complete_learning_topic)
 
@@ -160,6 +160,73 @@ hr {
     border-color: #7845E5;
     color: #FFFFFF;
 }
+
+
+/* High-contrast dark theme for all Streamlit widgets and Markdown. */
+:root { color-scheme: dark; }
+.stApp, .stApp [data-testid="stMarkdownContainer"],
+.stApp [data-testid="stMarkdownContainer"] p,
+.stApp [data-testid="stMarkdownContainer"] li,
+.stApp [data-testid="stMarkdownContainer"] strong,
+.stApp [data-testid="stMarkdownContainer"] em,
+.stApp [data-testid="stMarkdownContainer"] blockquote,
+.stApp [data-testid="stChatMessageContent"],
+.stApp [data-testid="stChatMessageContent"] * {
+    color: #E7EAF5 !important;
+}
+.stApp [data-testid="stCaptionContainer"],
+.stApp [data-testid="stCaptionContainer"] p,
+.stApp small, .stApp .muted { color:#B9C5DC !important; }
+.stApp [data-testid="stWidgetLabel"] p,
+.stApp [data-testid="stSelectbox"] label,
+.stApp [data-testid="stTextInput"] label { color:#E7EAF5 !important; }
+/* Inputs and selected values must be readable while editing. */
+.stApp [data-baseweb="input"],
+.stApp [data-baseweb="textarea"],
+.stApp [data-baseweb="select"] > div,
+.stApp [data-testid="stChatInput"] > div,
+.stApp [data-testid="stFileUploaderDropzone"] {
+    background:#253451 !important;
+    border-color:#546681 !important;
+    color:#FFFFFF !important;
+}
+.stApp input, .stApp textarea,
+.stApp [data-baseweb="select"] input,
+.stApp [data-baseweb="select"] [role="combobox"],
+.stApp [data-baseweb="select"] [role="combobox"] * {
+    color:#FFFFFF !important;
+    -webkit-text-fill-color:#FFFFFF !important;
+    caret-color:#FFFFFF !important;
+}
+.stApp input::placeholder, .stApp textarea::placeholder {
+    color:#BCC8DB !important;
+    -webkit-text-fill-color:#BCC8DB !important;
+    opacity:1;
+}
+.stApp [data-baseweb="select"] svg,
+.stApp [data-testid="stChatInput"] button svg { fill:#DCE7F9 !important; }
+/* Pop-up options are rendered outside the app root. */
+[role="listbox"], [role="option"], [data-baseweb="popover"] {
+    background:#253451 !important;
+    color:#FFFFFF !important;
+}
+[role="option"]:hover { background:#405477 !important; }
+.stApp [data-testid="stExpander"] > details > summary,
+.stApp [data-testid="stExpander"] > details > summary * {
+    background:#253451 !important;
+    color:#E7EAF5 !important;
+}
+.stApp button:not([kind="primary"]) {
+    background:#263755;
+    color:#F3F6FD !important;
+    border:1px solid #596985;
+}
+.stApp button:disabled, .stApp button[disabled] {
+    background:#35425D !important;
+    color:#CCD5E6 !important;
+    opacity:0.85;
+}
+.stApp [data-testid="stAlert"] * { color:inherit; }
 
 </style>
 
@@ -364,6 +431,18 @@ def dashboard():
 
 
 
+def start_next_tutor_topic(document_id: int, topic_name: str):
+    """Carry the correct material and topic into the four-stage tutor."""
+    st.session_state["tutor_pending"] = {
+        "question": f"Explain {topic_name} from my study material.",
+        "topic": topic_name,
+        "review": None,
+        "document_id": document_id,
+    }
+    st.session_state["nav_request"] = "💬 AI Tutor"
+    st.rerun()
+
+
 def library():
     title("Learning Library",
     "Keep your notes, slides, and lectures in one place.")
@@ -463,52 +542,45 @@ def library():
             st.write(f"Imported: {d['uploaded_at'][:19]} UTC")
             st.caption("Retrieved answers will show precise page, slide or timestamp locations.")
 
-            # Smart Learning Path
+            # Per-material topic breakdown: available even without an API key.
             st.divider()
-            path = get_learning_path(d["id"])
-
-            if not path:
-                if st.button(
-                    "✨ Generate Learning Path",
-                    key=f"generate_path_{d['id']}"                ):
-                    with st.spinner("Identifying learning topics..."):
+            path = ensure_learning_path(d["id"])
+            st.markdown("**Study topics · recommended order**")
+            if path:
+                completed = sum(bool(item["completed"]) for item in path)
+                st.progress(completed / len(path),
+                            text=f"{completed}/{len(path)} topics completed")
+                for item in path:
+                    icon = "✅" if item["completed"] else "○"
+                    st.write(f"{icon} {item['topic_order']}. {item['topic_name']}")
+                upcoming = next((item for item in path if not item["completed"]), None)
+                if upcoming:
+                    st.info(f"📚 Recommended next: {upcoming['topic_name']}")
+                    if st.button("▶ Study this topic", key=f"library_study_{d['id']}"):
+                        start_next_tutor_topic(d["id"], upcoming["topic_name"])
+                else:
+                    st.success("🎉 All topics completed!")
+            else:
+                st.info("This source needs readable lesson text to identify topics.")
+            if gemini_key():
+                if st.button("✨ Improve topic breakdown with AI",
+                             key=f"generate_path_{d['id']}"):
+                    with st.spinner("Organizing topics from this material..."):
                         try:
                             topics = generate_learning_path(d["id"])
-                            save_learning_path(d["id"], topics)
+                            save_learning_path(d["id"], topics, replace=True)
                             st.rerun()
                         except Exception as exc:
                             st.error(f"Learning path failed: {exc}")
-
             else:
-                st.markdown("**Your Learning Path**")
-                completed = sum(
-                    1 for item in path if item["completed"])
-
-                st.progress(completed / len(path),
-                    text=f"{completed}/{len(path)} topics completed"                )
-
-                for item in path:
-                    icon = "✅" if item["completed"] else "⭕"
-                    st.write(
-                        f"{icon} {item['topic_order']}. "
-                        f"{item['topic_name']}")
-
-                next_topic = next(
-                    (item for item in path if not item["completed"]),
-                    None
-                )
-
-                if next_topic:
-                    st.info(
-                        f"📚 Up next: {next_topic['topic_name']}"
-                    )
-                else:
-                    st.success("All topics completed!")
+                st.caption("Add GEMINI_API_KEY to create a more accurate AI learning path.")
 
 
-def begin_tutoring(question: str, *, topic: str | None = None, review: dict | None = None):
+def begin_tutoring(question: str, *, topic: str | None = None, review: dict | None = None,
+                    document_id: int | None = None):
     """Start or restart a teaching journey only after the first response succeeds."""
-    answer, passages = answer_question(question, level=1, review=review)
+    answer, passages = answer_question(question, level=1, review=review,
+                                       document_id=document_id)
     old = st.session_state.get("tutor_flow")
     
     # Do not start tutoring if no relevant material was found
@@ -527,6 +599,7 @@ def begin_tutoring(question: str, *, topic: str | None = None, review: dict | No
         "question": question,
         "topic": topic or question,
         "review": review,
+        "document_id": document_id,
         "steps": [{"level": 1, "answer": answer, "sources": passages}],
         "understood": False,
     }
@@ -536,7 +609,8 @@ def continue_tutoring(level: int, confusion: str = ""):
     """Advance after the API succeeds so an error never discards progress."""
     flow = st.session_state.tutor_flow
     answer, passages = answer_question(flow["question"], level=level, review=flow["review"],
-                                       confusion=confusion)
+                                       confusion=confusion,
+                                       document_id=flow.get("document_id"))
     flow["steps"].append({"level": level, "answer": answer, "sources": passages,
                           "confusion": confusion})
 
@@ -552,7 +626,8 @@ def tutor():
     if pending:
         with st.spinner("Preparing a lesson on your missed question..."):
             try:
-                begin_tutoring(pending["question"], topic=pending["topic"], review=pending["review"])
+                begin_tutoring(pending["question"], topic=pending["topic"], review=pending["review"],
+                               document_id=pending.get("document_id"))
                 del st.session_state["tutor_pending"]
             except Exception as exc:
                 st.error(f"Could not start this tutoring session: {exc}")
@@ -647,6 +722,33 @@ def tutor():
         st.info("Type a question below. I'll begin with a clear definition and detailed explanation.")
 
 
+def render_mindmap_preview(tree):
+    """Render a readable mind-map tree without extra Python dependencies."""
+    root = escape(str(tree["root"]))
+    cards = []
+    for node in tree.get("children", [])[:8]:
+        if not isinstance(node, dict):
+            continue
+        name = escape(str(node.get("name", "Topic")))
+        subitems = "".join(
+            f'<li>{escape(str(child.get("name", "Concept")))}</li>'
+            for child in node.get("children", []) if isinstance(child, dict)
+        )
+        cards.append(f'<div class="mind-branch"><div class="mind-title">{name}</div>'
+                     + (f'<ul>{subitems}</ul>' if subitems else '') + '</div>')
+    markup = '''<style>
+    .mind-root {margin: 12px auto 24px; border-radius:16px; padding:18px;
+      text-align:center; background:#6254CF; color:#FFFFFF; font-size:1.25rem;
+      font-weight:700; max-width:510px;}
+    .mind-grid {display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+      gap:14px; align-items:stretch; margin-bottom:16px;}
+    .mind-branch {background:#253451; border:1px solid #556A93; border-radius:14px;
+      padding:16px 20px; color:#F6F8FC;}
+    .mind-title {font-weight:700; color:#FFFFFF; margin-bottom:10px;}
+    .mind-branch li {color:#E7EAF5; padding:4px 0;}
+    </style>''' + f'<div class="mind-root">{root}</div><div class="mind-grid">' + "".join(cards) + '</div>'
+    st.html(markup)
+
 def mind_maps():
     st.title("Mind Maps")
     st.caption("Turn your lessons into visual concept maps.")
@@ -683,24 +785,18 @@ def mind_maps():
         with st.spinner("Creating your mind map..."):
             try:
                 # Find passages belonging to this document
-                all_chunks = [
-                    chunk for chunk in get_chunks()
-                    if (
-                        chunk.get("document_id") == selected_id
-                        or chunk.get("name") == selected_doc["name"]
-                    )
-                ]
+                all_chunks = get_chunks(selected_id)
 
                 if topic.strip():
-                    passages = retrieve(
-                        topic.strip(),
-                        10,
-                        document_id=selected_id
-                    )
+                    passages = retrieve(topic.strip(), 10, document_id=selected_id)
+                    if not passages:
+                        passages = [{**chunk, "marker": f"S{i+1}"}
+                                    for i, chunk in enumerate(all_chunks[:10])]
                 else:
                     # Sample passages across the document
                     step = max(1, (len(all_chunks) + 9) // 10)
-                    passages = all_chunks[::step][:10]
+                    passages = [{**chunk, "marker": f"S{i+1}"}
+                                for i, chunk in enumerate(all_chunks[::step][:10])]
 
                 if not passages:
                     st.warning(
@@ -713,6 +809,8 @@ def mind_maps():
                         topic
                     )
 
+                    if not isinstance(tree, dict) or not tree.get("root") or not tree.get("children"):
+                        raise ValueError("No usable mind map returned. Please retry.")
                     st.session_state["mind_map_result"] = {
                         "document_id": selected_id,
                         "tree": tree,
@@ -728,16 +826,20 @@ def mind_maps():
     result = st.session_state.get("mind_map_result")
 
     if result and result["document_id"] == selected_id:
-        st.subheader(result["tree"]["root"])
-
-        diagram = render_mindmap(result["tree"])
-
-        st.download_button(
-            "Download Mind Map",
-            data=diagram,
-            file_name="chapterly_mindmap.mmd",
-            mime="text/plain"
-        )
+        tree = result.get("tree") or {}
+        if not isinstance(tree, dict) or not tree.get("root") or not isinstance(tree.get("children"), list):
+            st.error("The saved mind map is incomplete. Please generate it again.")
+            st.session_state.pop("mind_map_result", None)
+            return
+        st.subheader(tree["root"])
+        render_mindmap_preview(tree)
+        try:
+            diagram = render_mindmap(tree)
+            st.download_button(
+                "Download Mind Map (.mmd)", data=diagram,
+                file_name="chapterly_mindmap.mmd", mime="text/plain")
+        except Exception as exc:
+            st.warning(f"Mind map is visible, but download is unavailable: {exc}")
 
         with st.expander("View source passages"):
             for passage in result["passages"]:
@@ -772,13 +874,11 @@ def quiz():
         help="Topics are suggested from the text extracted from this source.",
     )
     
-    # Prefer topics from the saved Smart Learning Path
-    learning_path = get_learning_path(selected_document_id)
-
-    if learning_path:
-        topics = [item["topic_name"] for item in learning_path]
-    else:
-        topics = get_document_topics(selected_document_id) or ["General review"]
+    # Every document gets a saved topic breakdown, even without Gemini.
+    learning_path = ensure_learning_path(selected_document_id)
+    topics = [item["topic_name"] for item in learning_path] or ["General review"]
+    if not learning_path:
+        st.info("Only a general review is available. Add more lesson content for specific topics.")
 
     topic = st.selectbox(
         "Choose a topic",
@@ -885,70 +985,34 @@ def quiz():
 
         document_id = current.get("document_id")
 
-        if passed and document_id is not None and not current.get("is_retry", False):
-
-            learning_path = get_learning_path(document_id)
-
-            topic_exists = any(
-                item["topic_name"] == current["topic"]
-                for item in learning_path            )
-
-            if topic_exists:
-                if not current.get("path_recorded", False):
-                    complete_learning_topic(
-                        document_id,
-                        current["topic"])
-
+        # A passed retry should also advance the student's learning path.
+        if passed and document_id is not None:
+            if not current.get("path_recorded"):
+                if complete_learning_topic(document_id, current["topic"]):
                     current["path_recorded"] = True
                     st.session_state.quiz = current
-
-                st.success("✅ Learning Path updated! "
-                    "You have completed this topic.")
-                
-                # Recommend the next unfinished topic
-                updated_path = get_learning_path(document_id)
-
-                next_topic = next(
-                    (
-                        item for item in updated_path
-                        if not item["completed"]
-                    ),
-                    None
-                )
-
-                if next_topic:
-                    st.info(
-                        f"📚 Up next: {next_topic['topic_name']}"
-                    )
-
-                    if st.button(
-                        "▶ Continue Learning",
-                        key=f"continue_learning_{current['epoch']}"
-                    ):
-                        st.session_state.next_quiz_target = {
-                            "document_id": document_id,
-                            "topic": next_topic["topic_name"]
-                        }
-
-                        st.session_state.tutor_pending = {
-                            "question": (
-                                f"Explain {next_topic['topic_name']} "
-                                "from my learning material."
-                            ),
-                            "topic": next_topic["topic_name"],
-                            "review": None,
-                            "document_id": document_id
-                        }
-
-                        st.session_state.nav_request = "💬 AI Tutor"
-                        st.rerun()
-
-                else:
-                    st.success(
-                        "🎉 Learning Path Completed! "
-                        "You've finished every topic."
-                    )
-
+            updated_path = get_learning_path(document_id)
+            if current.get("path_recorded"):
+                st.success("✅ Topic completed! Learning Path updated.")
+            next_topic = next((item for item in updated_path if not item["completed"]), None)
+            if next_topic:
+                st.info(f"📚 Next recommended topic: {next_topic['topic_name']}")
+                if st.button("▶ Continue learning: " + next_topic["topic_name"],
+                             key=f"continue_learning_{current['epoch']}",
+                             type="primary"):
+                    start_next_tutor_topic(document_id, next_topic["topic_name"])
+                if st.button("🧠 Quiz me on the next topic",
+                             key=f"next_quiz_{current['epoch']}"):
+                    st.session_state["next_quiz_target"] = {
+                        "document_id": document_id,
+                        "topic": next_topic["topic_name"],
+                    }
+                    st.session_state.quiz = None
+                    st.rerun()
+            elif updated_path:
+                st.success("🎉 Learning Path completed! All topics finished.")
+        elif not passed:
+            st.info("Review missed answers, then try again to complete this topic.")
 
         st.success(f"You scored {score}/{len(questions)} · Updated mastery: {mastery(current['topic'])}%")
         for n, (q, result) in enumerate(zip(questions, current["results"]), 1):
