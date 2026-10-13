@@ -252,7 +252,21 @@ header[data-testid="stHeader"] svg,
     stroke: #FFFFFF !important;
 }
 
+/* Dropdown selected text color */
+div[data-testid="stSelectbox"] [data-baseweb="select"] {
+    color: #1B2A4A !important;
+}
 
+div[data-testid="stSelectbox"] [data-baseweb="select"] span,
+div[data-testid="stSelectbox"] [data-baseweb="select"] input {
+    color: #1B2A4A !important;
+    -webkit-text-fill-color: #1B2A4A !important;
+}
+
+/* Dropdown list text color */
+div[data-baseweb="popover"] [role="option"] {
+    color: #1B2A4A !important;
+}
 </style>
 
 """, unsafe_allow_html=True)
