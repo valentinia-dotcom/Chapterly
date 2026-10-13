@@ -244,6 +244,21 @@ div[data-testid="stTextArea"] textarea {
     color: #1B2A4A !important;
     -webkit-text-fill-color: #1B2A4A !important;
 }
+/* Top navigation icon colors */
+header[data-testid="stHeader"] svg,
+[data-testid="stSidebarCollapsedControl"] svg,
+[data-testid="stToolbar"] svg {
+    color: #FFFFFF !important;
+    stroke: #FFFFFF !important;
+}
+
+/* Navigation button backgrounds */
+header[data-testid="stHeader"] button,
+[data-testid="stSidebarCollapsedControl"] button {
+    color: #FFFFFF !important;
+    background-color: #303B5C !important;
+    border-radius: 8px !important;
+}
 </style>
 
 """, unsafe_allow_html=True)
