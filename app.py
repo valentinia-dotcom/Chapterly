@@ -143,6 +143,7 @@ with st.sidebar:
 
 
 def load_sample():
+    return add_document(path.name, path.read_bytes())
     path = BASE_DIR / "sample_materials" / "photosynthesis.txt"
     return add_document(path.name, path.read_bytes())
 
