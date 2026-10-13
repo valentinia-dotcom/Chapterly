@@ -227,7 +227,23 @@ hr {
     opacity:0.85;
 }
 .stApp [data-testid="stAlert"] * { color:inherit; }
+/* Input box font color */
+div[data-testid="stTextInput"] input {
+    color: #1B2A4A !important;
+    -webkit-text-fill-color: #1B2A4A !important;
+}
 
+/* Placeholder text color */
+div[data-testid="stTextInput"] input::placeholder {
+    color: #707785 !important;
+    -webkit-text-fill-color: #707785 !important;
+}
+
+/* Text area font color */
+div[data-testid="stTextArea"] textarea {
+    color: #1B2A4A !important;
+    -webkit-text-fill-color: #1B2A4A !important;
+}
 </style>
 
 """, unsafe_allow_html=True)
